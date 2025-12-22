@@ -8,12 +8,10 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-  origin: [
-    "https://shiftfront.vercel.app",
-    "http://localhost:5173"
-  ],
+  origin: true,   // ACCEPTĂ orice origin
   credentials: true
 }));
+
 app.use(express.json());
 
 // =================================================
@@ -190,7 +188,7 @@ app.get("/api/leaderboard", async (req, res) => {
 // START
 // =================================================
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Server running on 0.0.0.0:${PORT}`);
