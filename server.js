@@ -8,10 +8,12 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-  origin: true,   // ACCEPTĂ orice origin
+  origin: [
+    "https://shiftfront.vercel.app",
+    "http://localhost:5173"
+  ],
   credentials: true
 }));
-
 app.use(express.json());
 
 // =================================================
