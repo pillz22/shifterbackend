@@ -4,12 +4,25 @@ import Winner from "../models/Winner.js";
 import PayoutState from "../models/PayoutState.js";
 import RoundState from "../models/RoundState.js";
 import { sendUSDC } from "./sendUSDC.js";
+import { PublicKey } from "@solana/web3.js";
+
+// ============================
+// HELPERS
+// ============================
+function isValidSolanaAddress(addr) {
+  try {
+    new PublicKey(addr);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export async function runPayout() {
   console.log("Running payout job...");
 
   const now = new Date();
-  const interval = 2 * 60 * 1000; // 1 minut (DEV)
+  const interval = 2 * 60 * 1000; // 2 min (DEV)
   const nextRunAt = new Date(now.getTime() + interval);
 
   try {
@@ -56,7 +69,7 @@ export async function runPayout() {
     }
 
     // ============================
-    // E. PAYOUT RUNDA ÎNCHEIATĂ
+    // E. LEADERBOARD RUNDA CURENTĂ
     // ============================
     const leaderboard = await Score.aggregate([
       { $match: { roundId: round.roundId } },
@@ -65,36 +78,55 @@ export async function runPayout() {
       { $limit: 3 }
     ]);
 
-    const rewards = [1, 1, 1];
+    if (leaderboard.length === 0) {
+      console.log("No players this round");
+    }
 
+    const rewards = [1, 1, 1]; // $1 test
+
+    // ============================
+    // F. PAYOUT (SAFE)
+    // ============================
     for (let i = 0; i < leaderboard.length; i++) {
       const entry = leaderboard[i];
       const user = await User.findById(entry._id);
-      if (!user || !user.wallet) continue;
 
-      const tx = await sendUSDC(user.wallet, rewards[i]);
+      if (!user || !user.wallet) {
+        console.log(`⚠️ Skipping user ${user?.username}: no wallet`);
+        continue;
+      }
+
+      if (!isValidSolanaAddress(user.wallet)) {
+        console.log(
+          `⚠️ Skipping user ${user.username}: invalid Solana wallet (${user.wallet})`
+        );
+        continue;
+      }
+
+      const amount = rewards[i];
+      const tx = await sendUSDC(user.wallet, amount);
 
       await Winner.create({
         userId: user._id,
         username: user.username,
         rank: i + 1,
-        amount: rewards[i],
+        amount,
         wallet: user.wallet,
         tx,
         roundId: round.roundId
       });
 
-      console.log(`Paid $${rewards[i]} to ${user.username}`);
+      console.log(`✅ Paid $${amount} USDC to ${user.username}`);
     }
 
     // ============================
-    // 🔒 F. MARCĂM RUNDA CA PLĂTITĂ
+    // 🔒 G. MARCĂM RUNDA CA PLĂTITĂ
     // ============================
     round.paidAt = now;
     await round.save();
 
     // ============================
-    // 🔄 G. PORNIM RUNDA NOUĂ
+    // 🔄 H. PORNIM RUNDA NOUĂ
     // ============================
     await RoundState.updateOne(
       { _id: round._id },
