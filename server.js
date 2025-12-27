@@ -6,6 +6,7 @@ import crypto from "crypto";
 import rewardsRouter from "./routes/rewards.js";
 import { runPayout } from "./services/payoutService.js";
 import User from "./models/User.js";
+import RoundState from "./models/RoundState.js";
 import Score from "./models/Score.js";
 
 
@@ -141,10 +142,21 @@ app.post("/api/save-score", authRequired, async (req, res) => {
     if (user.lastScoreAt && now - user.lastScoreAt < 3000)
       return res.status(429).json({ error: "Too fast" });
 
+    // 🔥 LUĂM RUNDA CURENTĂ
+    const round = await RoundState.findOne();
+    if (!round) {
+      return res.status(500).json({ error: "Round not initialized" });
+    }
+
     user.lastScoreAt = now;
     await user.save();
 
-    await Score.create({ userId: user._id, score });
+    // 🔥 SALVĂM SCORUL ÎN RUNDA CURENTĂ
+    await Score.create({
+      userId: user._id,
+      score,
+      roundId: round.roundId
+    });
 
     res.json({ success: true });
 
