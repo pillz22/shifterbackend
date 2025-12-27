@@ -34,7 +34,7 @@ app.use("/api", rewardsRouter);
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB connected");
-    setInterval(runPayout, 1 * 60 * 1000);
+    setInterval(runPayout, 60 * 1000);
     runPayout();
   })
   .catch(err => console.error("❌ MongoDB error:", err));

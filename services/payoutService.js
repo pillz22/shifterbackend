@@ -12,7 +12,7 @@ export async function runPayout() {
   console.log("Running payout job...");
 
   const now = new Date();
-  const interval = 5 * 60 * 1000;
+  const interval = 60 * 1000;
   const nextRunAt = new Date(now.getTime() + interval);
 
   try {
