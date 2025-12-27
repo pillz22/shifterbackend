@@ -8,7 +8,7 @@ export async function runPayout() {
   console.log("Running payout job...");
 
   const now = new Date();
-  const interval = 60 * 1000; // 1 minut (DEV)
+  const interval = 2 * 60 * 1000; // 1 minut (DEV)
   const nextRunAt = new Date(now.getTime() + interval);
 
   try {
