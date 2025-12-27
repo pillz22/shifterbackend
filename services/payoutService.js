@@ -22,7 +22,7 @@ export async function runPayout() {
   console.log("Running payout job...");
 
   const now = new Date();
-  const interval = 2 * 60 * 1000; // 2 min (DEV)
+  const interval = 2 * 60 * 1000; // 2 min
   const nextRunAt = new Date(now.getTime() + interval);
 
   try {
@@ -61,15 +61,15 @@ export async function runPayout() {
     }
 
     // ============================
-    // 🛑 D. RUNDA DEJA PLĂTITĂ
+    // 🛑 D. RUNDA DEJA PROCESATĂ
     // ============================
     if (round.paidAt) {
-      console.log("Round already paid, skipping");
+      console.log("Round already processed, skipping");
       return;
     }
 
     // ============================
-    // E. LEADERBOARD RUNDA CURENTĂ
+    // E. LEADERBOARD RUNDA
     // ============================
     const leaderboard = await Score.aggregate([
       { $match: { roundId: round.roundId } },
@@ -78,14 +78,10 @@ export async function runPayout() {
       { $limit: 3 }
     ]);
 
-    if (leaderboard.length === 0) {
-      console.log("No players this round");
-    }
-
-    const rewards = [1, 1, 1]; // $1 test
+    const rewards = [1, 1, 1]; // test
 
     // ============================
-    // F. PAYOUT (SAFE)
+    // F. PROCESĂM WINNERII
     // ============================
     for (let i = 0; i < leaderboard.length; i++) {
       const entry = leaderboard[i];
@@ -97,15 +93,26 @@ export async function runPayout() {
       }
 
       if (!isValidSolanaAddress(user.wallet)) {
-        console.log(
-          `⚠️ Skipping user ${user.username}: invalid Solana wallet (${user.wallet})`
-        );
+        console.log(`⚠️ Skipping user ${user.username}: invalid wallet`);
         continue;
       }
 
       const amount = rewards[i];
-      const tx = await sendUSDC(user.wallet, amount);
 
+      let tx = null;
+      let paymentStatus = "paid";
+      let failureReason = null;
+
+      try {
+        tx = await sendUSDC(user.wallet, amount);
+        console.log(`✅ Paid $${amount} USDC to ${user.username}`);
+      } catch (err) {
+        paymentStatus = "failed";
+        failureReason = err.message;
+        console.log(`❌ Payment failed for ${user.username}: ${err.message}`);
+      }
+
+      // 🔥 SALVĂM WINNER ORICUM
       await Winner.create({
         userId: user._id,
         username: user.username,
@@ -113,20 +120,20 @@ export async function runPayout() {
         amount,
         wallet: user.wallet,
         tx,
+        paymentStatus,
+        failureReason,
         roundId: round.roundId
       });
-
-      console.log(`✅ Paid $${amount} USDC to ${user.username}`);
     }
 
     // ============================
-    // 🔒 G. MARCĂM RUNDA CA PLĂTITĂ
+    // 🔒 G. ÎNCHIDEM RUNDA
     // ============================
     round.paidAt = now;
     await round.save();
 
     // ============================
-    // 🔄 H. PORNIM RUNDA NOUĂ
+    // 🔄 H. PORNIM RUNDA NOUĂf
     // ============================
     await RoundState.updateOne(
       { _id: round._id },
@@ -141,6 +148,6 @@ export async function runPayout() {
     console.log(`New round ${round.roundId + 1} started`);
 
   } catch (err) {
-    console.error("PAYOUT ERROR:", err);
+    console.error("PAYOUT ERROR (SYSTEM):", err);
   }
 }

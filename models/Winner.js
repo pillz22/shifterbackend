@@ -1,15 +1,19 @@
-import mongoose from "mongoose";
+const winnerSchema = new mongoose.Schema({
+  userId: mongoose.Schema.Types.ObjectId,
+  username: String,
+  rank: Number,
+  amount: Number,
+  wallet: String,
 
-const WinnerSchema = new mongoose.Schema({
-    userId: mongoose.Schema.Types.ObjectId,
-    username: String,
-    rank: Number,
-    amount: Number,
-    wallet: String,
-    tx: String,
-    roundId: Number,
-    timestamp: { type: Date, default: Date.now }
-  });
-  
+  // payment
+  tx: String,
+  paymentStatus: {
+    type: String,
+    enum: ["paid", "failed"],
+    default: "paid"
+  },
+  failureReason: String,
 
-export default mongoose.model("Winner", WinnerSchema);
+  roundId: Number,
+  createdAt: { type: Date, default: Date.now }
+});
