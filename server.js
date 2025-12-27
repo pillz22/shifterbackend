@@ -6,8 +6,8 @@ import crypto from "crypto";
 import rewardsRouter from "./routes/rewards.js";
 import { runPayout } from "./services/payoutService.js";
 import User from "./models/User.js";
-import RoundState from "./models/RoundState.js";
 import Score from "./models/Score.js";
+import RoundState from "./models/RoundState.js";
 
 
 
@@ -36,7 +36,6 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB connected");
     setInterval(runPayout, 2 * 60 * 1000);
-    runPayout();
   })
   .catch(err => console.error("❌ MongoDB error:", err));
 
@@ -132,26 +131,20 @@ app.post("/api/save-score", authRequired, async (req, res) => {
     const { score } = req.body;
     const user = req.user;
 
-    if (!score || score <= 0)
+    if (!score || score <= 0 || score > 150) {
       return res.status(400).json({ error: "Invalid score" });
-
-    if (score > 150)
-      return res.status(400).json({ error: "Score exceeds limit" });
-
-    const now = Date.now();
-    if (user.lastScoreAt && now - user.lastScoreAt < 3000)
-      return res.status(429).json({ error: "Too fast" });
-
-    // 🔥 LUĂM RUNDA CURENTĂ
-    const round = await RoundState.findOne();
-    if (!round) {
-      return res.status(500).json({ error: "Round not initialized" });
     }
 
-    user.lastScoreAt = now;
-    await user.save();
+    const round = await RoundState.findOne();
+    if (!round) {
+      return res.status(400).json({ error: "No active round" });
+    }
 
-    // 🔥 SALVĂM SCORUL ÎN RUNDA CURENTĂ
+    // 🔒 RUNDA S-A TERMINAT
+    if (round.paidAt || Date.now() > round.endsAt.getTime()) {
+      return res.status(400).json({ error: "Round already ended" });
+    }
+
     await Score.create({
       userId: user._id,
       score,
