@@ -20,4 +20,4 @@ const winnerSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-export default mongoose.model("Winner", WinnerSchema);
+export default mongoose.model("Winner", winnerSchema);
