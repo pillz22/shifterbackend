@@ -13,19 +13,20 @@ export async function runPayout() {
 
   try {
     // ============================
-    // A. LUĂM SAU INIȚIALIZĂM RUNDA
+    // A. LUĂM SAU CREĂM RUNDA
     // ============================
     let round = await RoundState.findOne();
 
     if (!round) {
-      round = await RoundState.create({
+      await RoundState.create({
         roundId: 1,
         startedAt: now,
-        endsAt: new Date(now.getTime() + interval)
+        endsAt: new Date(now.getTime() + interval),
+        paidAt: null
       });
 
       console.log("Round initialized");
-      return; // ⛔ nu plătim la inițializare
+      return; // ⛔ NU plătim la inițializare
     }
 
     // ============================
@@ -46,7 +47,15 @@ export async function runPayout() {
     }
 
     // ============================
-    // D. PAYOUT PENTRU RUNDA ÎNCHEIATĂ
+    // 🛑 D. RUNDA DEJA PLĂTITĂ
+    // ============================
+    if (round.paidAt) {
+      console.log("Round already paid, skipping");
+      return;
+    }
+
+    // ============================
+    // E. PAYOUT RUNDA ÎNCHEIATĂ
     // ============================
     const leaderboard = await Score.aggregate([
       { $match: { roundId: round.roundId } },
@@ -55,41 +64,48 @@ export async function runPayout() {
       { $limit: 3 }
     ]);
 
-    if (leaderboard.length === 0) {
-      console.log("No players this round.");
-    } else {
-      const rewards = [10, 5, 5];
+    const rewards = [10, 5, 5];
 
-      for (let i = 0; i < leaderboard.length; i++) {
-        const entry = leaderboard[i];
-        const user = await User.findById(entry._id);
-        if (!user || !user.wallet) continue;
+    for (let i = 0; i < leaderboard.length; i++) {
+      const entry = leaderboard[i];
+      const user = await User.findById(entry._id);
+      if (!user || !user.wallet) continue;
 
-        const tx = "FAKE_TX_" + Math.random().toString(36).slice(2, 10);
+      const tx = "FAKE_TX_" + Math.random().toString(36).slice(2, 10);
 
-        await Winner.create({
-          userId: user._id,
-          username: user.username,
-          rank: i + 1,
-          amount: rewards[i],
-          wallet: user.wallet,
-          tx,
-          roundId: round.roundId
-        });
+      await Winner.create({
+        userId: user._id,
+        username: user.username,
+        rank: i + 1,
+        amount: rewards[i],
+        wallet: user.wallet,
+        tx,
+        roundId: round.roundId
+      });
 
-        console.log(`Paid $${rewards[i]} to ${user.username}`);
-      }
+      console.log(`Paid $${rewards[i]} to ${user.username}`);
     }
 
     // ============================
-    // 🔄 E. PORNIM RUNDA NOUĂ
+    // 🔒 F. MARCĂM RUNDA CA PLĂTITĂ
     // ============================
-    round.roundId += 1;
-    round.startedAt = now;
-    round.endsAt = new Date(now.getTime() + interval);
+    round.paidAt = now;
     await round.save();
 
-    console.log(`New round ${round.roundId} started`);
+    // ============================
+    // 🔄 G. PORNIM RUNDA NOUĂ
+    // ============================
+    await RoundState.updateOne(
+      { _id: round._id },
+      {
+        roundId: round.roundId + 1,
+        startedAt: now,
+        endsAt: new Date(now.getTime() + interval),
+        paidAt: null
+      }
+    );
+
+    console.log(`New round ${round.roundId + 1} started`);
 
   } catch (err) {
     console.error("PAYOUT ERROR:", err);
