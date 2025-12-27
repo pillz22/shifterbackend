@@ -3,6 +3,10 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import rewardsRouter from "./routes/rewards.js";
+import { runPayout } from "./services/payoutService.js";
+
+
 
 dotenv.config();
 
@@ -12,7 +16,13 @@ app.use(cors({
   credentials: true
 }));
 
+
 app.use(express.json());
+
+app.use("/api", rewardsRouter);
+
+
+
 
 // =================================================
 // MONGO
@@ -20,6 +30,9 @@ app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
+
+
+  
   .catch(err => console.error("❌ MongoDB error:", err));
 
 // =================================================
@@ -29,6 +42,7 @@ const userSchema = new mongoose.Schema({
   username: { type: String, unique: true },
   passwordHash: { type: String, required: true },
   token: String,
+  wallet: String,
   createdAt: { type: Date, default: Date.now },
   lastScoreAt: Date
 });
@@ -67,7 +81,7 @@ async function authRequired(req, res, next) {
 
 app.post("/api/auth/signup", async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, wallet } = req.body;
 
     if (!username || !password)
       return res.status(400).json({ error: "Missing fields" });
@@ -76,10 +90,14 @@ app.post("/api/auth/signup", async (req, res) => {
     if (exists)
       return res.status(400).json({ error: "Username already taken" });
 
+    if (!wallet)
+      return res.status(400).json({ error: "Wallet required" });
+    
+
     const passwordHash = crypto.createHash("sha256").update(password).digest("hex");
     const token = crypto.randomBytes(32).toString("hex");
 
-    const user = await User.create({ username, passwordHash, token });
+    const user = await User.create({ username, passwordHash, token, wallet });
 
     res.json({
       token,
