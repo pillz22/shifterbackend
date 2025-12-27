@@ -102,17 +102,22 @@ export async function runPayout() {
       let tx = null;
       let paymentStatus = "paid";
       let failureReason = null;
-
+      
       try {
         tx = await sendUSDC(user.wallet, amount);
-        console.log(`✅ Paid $${amount} USDC to ${user.username}`);
       } catch (err) {
         paymentStatus = "failed";
-        failureReason = err.message;
-        console.log(`❌ Payment failed for ${user.username}: ${err.message}`);
+        failureReason =
+          err?.message ||
+          "Payment failed (insufficient funds or simulation error)";
+      
+        console.error(
+          `❌ Payment failed for ${user.username}:`,
+          failureReason
+        );
       }
-
-      // 🔥 SALVĂM WINNER ORICUM
+      
+      // 🔥 IMPORTANT: Winner se creează ORICUM
       await Winner.create({
         userId: user._id,
         username: user.username,
@@ -124,6 +129,7 @@ export async function runPayout() {
         failureReason,
         roundId: round.roundId
       });
+      
     }
 
     // ============================
