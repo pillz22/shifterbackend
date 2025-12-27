@@ -5,6 +5,9 @@ import dotenv from "dotenv";
 import crypto from "crypto";
 import rewardsRouter from "./routes/rewards.js";
 import { runPayout } from "./services/payoutService.js";
+import User from "./models/User.js";
+import Score from "./models/Score.js";
+
 
 
 
@@ -29,34 +32,12 @@ app.use("/api", rewardsRouter);
 // =================================================
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-
-
-  
+  .then(() => {
+    console.log("✅ MongoDB connected");
+    setInterval(runPayout, 5 * 60 * 1000);
+  })
   .catch(err => console.error("❌ MongoDB error:", err));
 
-// =================================================
-// SCHEMAS
-// =================================================
-const userSchema = new mongoose.Schema({
-  username: { type: String, unique: true },
-  passwordHash: { type: String, required: true },
-  token: String,
-  wallet: String,
-  createdAt: { type: Date, default: Date.now },
-  lastScoreAt: Date
-});
-
-
-const User = mongoose.model("User", userSchema);
-
-const scoreSchema = new mongoose.Schema({
-  userId: mongoose.Schema.Types.ObjectId,
-  score: Number,
-  timestamp: { type: Date, default: Date.now }
-});
-
-const Score = mongoose.model("Score", scoreSchema);
 
 // =================================================
 // MIDDLEWARE AUTH
