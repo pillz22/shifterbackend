@@ -172,7 +172,15 @@ app.post("/api/save-score", authRequired, async (req, res) => {
 
 app.get("/api/leaderboard", async (req, res) => {
   try {
+    // 🔥 LUĂM RUNDA CURENTĂ
+    const round = await RoundState.findOne();
+    if (!round) {
+      return res.json([]);
+    }
+
+    // 🔥 DOAR SCORURILE DIN RUNDA CURENTĂ
     const results = await Score.aggregate([
+      { $match: { roundId: round.roundId } },
       { $group: { _id: "$userId", best_score: { $max: "$score" } } },
       { $sort: { best_score: -1 } },
       { $limit: 10 }
