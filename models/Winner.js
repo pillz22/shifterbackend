@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+
 const winnerSchema = new mongoose.Schema({
   userId: mongoose.Schema.Types.ObjectId,
   username: String,
@@ -17,3 +19,5 @@ const winnerSchema = new mongoose.Schema({
   roundId: Number,
   createdAt: { type: Date, default: Date.now }
 });
+
+export default mongoose.model("Winner", WinnerSchema);
