@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import Winner from "../models/Winner.js";
 import PayoutState from "../models/PayoutState.js";
 import RoundState from "../models/RoundState.js";
+import { sendUSDC } from "./sendUSDC.js";
 
 export async function runPayout() {
   console.log("Running payout job...");
@@ -64,14 +65,14 @@ export async function runPayout() {
       { $limit: 3 }
     ]);
 
-    const rewards = [10, 5, 5];
+    const rewards = [1, 1, 1];
 
     for (let i = 0; i < leaderboard.length; i++) {
       const entry = leaderboard[i];
       const user = await User.findById(entry._id);
       if (!user || !user.wallet) continue;
 
-      const tx = "FAKE_TX_" + Math.random().toString(36).slice(2, 10);
+      const tx = await sendUSDC(user.wallet, rewards[i]);
 
       await Winner.create({
         userId: user._id,
