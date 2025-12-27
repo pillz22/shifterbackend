@@ -1,21 +1,29 @@
 import Score from "../models/Score.js";
 import User from "../models/User.js";
 import Winner from "../models/Winner.js";
+import PayoutState from "../models/PayoutState.js";
 
-// aici vei pune funcția reală care trimite premiul
 async function sendReward(wallet, amount) {
   console.log(`Sending $${amount} to wallet ${wallet}...`);
-
-  // TODO: HERE you connect wallet & send transaction
-  // return real TXID
   return "FAKE_TX_" + Math.random().toString(36).slice(2, 10);
 }
 
 export async function runPayout() {
   console.log("Running payout job...");
 
+  const now = new Date();
+  const interval = 5 * 60 * 1000;
+  const nextRunAt = new Date(now.getTime() + interval);
+
   try {
-    // 1. Luăm top 3
+    // ✅ update payout state (source of truth)
+    await PayoutState.findOneAndUpdate(
+      {},
+      { lastRunAt: now, nextRunAt },
+      { upsert: true }
+    );
+
+    // 1. Top 3
     const leaderboard = await Score.aggregate([
       { $group: { _id: "$userId", best_score: { $max: "$score" } } },
       { $sort: { best_score: -1 } },
@@ -27,23 +35,28 @@ export async function runPayout() {
       return;
     }
 
-    // premiile
     const rewards = [10, 5, 5];
 
-    // 2. Trimitem premiile
     for (let i = 0; i < leaderboard.length; i++) {
       const entry = leaderboard[i];
       const user = await User.findById(entry._id);
 
-      if (!user || !user.wallet) {
-        console.log(`User ${user?.username} has no wallet`);
+      if (!user || !user.wallet) continue;
+
+      // 🛑 anti-duplicate: same payout window
+      const alreadyPaid = await Winner.findOne({
+        userId: user._id,
+        timestamp: { $gte: now - interval }
+      });
+
+      if (alreadyPaid) {
+        console.log(`Skipping ${user.username}, already paid`);
         continue;
       }
 
       const amount = rewards[i];
       const tx = await sendReward(user.wallet, amount);
 
-      // 3. Salvăm în DB
       await Winner.create({
         userId: user._id,
         username: user.username,
@@ -53,7 +66,7 @@ export async function runPayout() {
         tx
       });
 
-      console.log(`Paid $${amount} to ${user.username} (TX ${tx})`);
+      console.log(`Paid $${amount} to ${user.username}`);
     }
 
   } catch (err) {
