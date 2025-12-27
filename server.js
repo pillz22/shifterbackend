@@ -35,6 +35,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB connected");
     setInterval(runPayout, 5 * 60 * 1000);
+    runPayout();
   })
   .catch(err => console.error("❌ MongoDB error:", err));
 
