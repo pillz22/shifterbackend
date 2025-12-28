@@ -131,19 +131,29 @@ app.post("/api/save-score", authRequired, async (req, res) => {
     const { score } = req.body;
     const user = req.user;
 
-    if (!score || score <= 0 || score > 150) {
+    if (!Number.isFinite(score) || score < 0 || score > 150) {
       return res.status(400).json({ error: "Invalid score" });
     }
+    
 
-    const round = await RoundState.findOne();
+    const round = await RoundState.findOne().sort({ endsAt: -1 });
+
     if (!round) {
       return res.status(400).json({ error: "No active round" });
     }
 
     // 🔒 RUNDA S-A TERMINAT
-    if (round.paidAt || Date.now() > round.endsAt.getTime()) {
-      return res.status(400).json({ error: "Round already ended" });
+    const GRACE_MS = 2 * 60 * 1000; // 2 minute
+
+    if (round.paidAt) {
+      return res.status(400).json({ error: "Round already paid" });
     }
+    
+    // acceptăm scor chiar dacă runda tocmai s-a terminat
+    if (Date.now() > round.endsAt.getTime() + GRACE_MS) {
+      return res.status(400).json({ error: "Round expired" });
+    }
+    
 
     await Score.create({
       userId: user._id,
@@ -166,7 +176,8 @@ app.post("/api/save-score", authRequired, async (req, res) => {
 app.get("/api/leaderboard", async (req, res) => {
   try {
     // 🔥 LUĂM RUNDA CURENTĂ
-    const round = await RoundState.findOne();
+    const round = await RoundState.findOne().sort({ endsAt: -1 });
+
     if (!round) {
       return res.json([]);
     }
