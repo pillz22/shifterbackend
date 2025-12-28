@@ -82,13 +82,9 @@ app.post("/api/auth/signup", async (req, res) => {
     const user = await User.create({ username, passwordHash, token, wallet });
 
     res.json({
-      token: user.token,
-      user: {
-        id: user._id,
-        username: user.username
-      }
+      token,
+      user: { username }
     });
-    
 
   } catch (err) {
     console.error("SIGNUP ERROR:", err);
@@ -117,12 +113,8 @@ app.post("/api/auth/login", async (req, res) => {
 
     res.json({
       token: user.token,
-      user: {
-        id: user._id,
-        username: user.username
-      }
+      user: { username }
     });
-    
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
@@ -139,10 +131,10 @@ app.post("/api/save-score", authRequired, async (req, res) => {
     const { score } = req.body;
     const user = req.user;
 
-    if (!Number.isFinite(score) || score < 0 || score > 150) {
-      return res.status(400).json({ error: "Invalid score" });
-    }
-    
+ if (!Number.isFinite(score) || score < 0 || score > 150) {
+  return res.status(400).json({ error: "Invalid score" });
+}
+
 
     const round = await RoundState.findOne().sort({ endsAt: -1 });
 
