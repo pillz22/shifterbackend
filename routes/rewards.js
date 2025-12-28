@@ -73,4 +73,29 @@ router.post("/mark-payout-seen", authRequired, async (req, res) => {
   }
 });
 
+router.get("/my-unseen-payout", authRequired, async (req, res) => {
+  try {
+    const winner = await Winner.findOne({
+      userId: req.user._id,
+      seen: false
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // dacă nu există nimic → răspuns clar
+    if (!winner) {
+      return res.json(null);
+    }
+
+    res.json({
+      winnerId: winner._id,
+      amount: winner.amount,
+      roundId: winner.roundId
+    });
+  } catch (err) {
+    console.error("MY UNSEEN PAYOUT ERROR:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 export default router;
