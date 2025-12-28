@@ -6,8 +6,6 @@ const winnerSchema = new mongoose.Schema({
   rank: Number,
   amount: Number,
   wallet: String,
-
-  // payment
   tx: String,
   paymentStatus: {
     type: String,
@@ -17,7 +15,9 @@ const winnerSchema = new mongoose.Schema({
   failureReason: String,
 
   roundId: Number,
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  seen: { type: Boolean, default: false }
+
 });
 
 export default mongoose.model("Winner", winnerSchema);
