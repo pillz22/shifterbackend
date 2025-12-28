@@ -82,9 +82,13 @@ app.post("/api/auth/signup", async (req, res) => {
     const user = await User.create({ username, passwordHash, token, wallet });
 
     res.json({
-      token,
-      user: { username }
+      token: user.token,
+      user: {
+        id: user._id,
+        username: user.username
+      }
     });
+    
 
   } catch (err) {
     console.error("SIGNUP ERROR:", err);
@@ -113,8 +117,12 @@ app.post("/api/auth/login", async (req, res) => {
 
     res.json({
       token: user.token,
-      user: { username }
+      user: {
+        id: user._id,
+        username: user.username
+      }
     });
+    
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
