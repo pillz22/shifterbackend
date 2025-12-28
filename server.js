@@ -8,6 +8,7 @@ import { runPayout } from "./services/payoutService.js";
 import User from "./models/User.js";
 import Score from "./models/Score.js";
 import RoundState from "./models/RoundState.js";
+import { PublicKey } from "@solana/web3.js";
 
 
 
@@ -74,16 +75,33 @@ app.post("/api/auth/signup", async (req, res) => {
 
     if (!wallet)
       return res.status(400).json({ error: "Wallet required" });
-    
 
-    const passwordHash = crypto.createHash("sha256").update(password).digest("hex");
+    try {
+      new PublicKey(wallet);
+    } catch {
+      return res.status(400).json({ error: "Invalid Solana wallet address" });
+    }
+
+    const passwordHash = crypto
+      .createHash("sha256")
+      .update(password)
+      .digest("hex");
+
     const token = crypto.randomBytes(32).toString("hex");
 
-    const user = await User.create({ username, passwordHash, token, wallet });
+    const user = await User.create({
+      username,
+      passwordHash,
+      token,
+      wallet
+    });
 
     res.json({
       token,
-      user: { username }
+      user: {
+        id: user._id,       // 🔥 IMPORTANT
+        username: user.username
+      }
     });
 
   } catch (err) {
@@ -113,8 +131,12 @@ app.post("/api/auth/login", async (req, res) => {
 
     res.json({
       token: user.token,
-      user: { username }
+      user: {
+        id: user._id,        // 🔥 CRITIC
+        username: user.username
+      }
     });
+    
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
