@@ -100,7 +100,8 @@ app.post("/api/auth/signup", async (req, res) => {
       token,
       user: {
         id: user._id,       // 🔥 IMPORTANT
-        username: user.username
+        username: user.username,
+        wallet: user.wallet
       }
     });
 
@@ -133,7 +134,8 @@ app.post("/api/auth/login", async (req, res) => {
       token: user.token,
       user: {
         id: user._id,        // 🔥 CRITIC
-        username: user.username
+        username: user.username,
+        wallet: user.wallet
       }
     });
     
