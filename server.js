@@ -283,18 +283,8 @@ app.post(
 
 app.post("/api/start-game", authRequired, async (req, res) => {
   try {
-    const user = req.user;
-
-    // ⏱️ prevenim sesiuni blocate / vechi
-    const MAX_SESSION_AGE = 5 * 60 * 1000; // 5 minute
-
-    if (
-      !user.gameStartedAt ||
-      Date.now() - user.gameStartedAt.getTime() > MAX_SESSION_AGE
-    ) {
-      user.gameStartedAt = new Date();
-      await user.save();
-    }
+    req.user.gameStartedAt = new Date();
+    await req.user.save();
 
     res.json({ ok: true });
   } catch (err) {
@@ -302,6 +292,7 @@ app.post("/api/start-game", authRequired, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 
