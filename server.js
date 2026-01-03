@@ -11,6 +11,10 @@ import RoundState from "./models/RoundState.js";
 import { PublicKey } from "@solana/web3.js";
 import rateLimit from "express-rate-limit";
 
+let leaderboardCache = {
+  data: null,
+  expiresAt: 0
+};
 
 
 dotenv.config();
@@ -181,21 +185,28 @@ app.post(
       const user = req.user;
 
       // ===============================
-      // 1️⃣ VALIDARE RUNDA
+      // 1️⃣ VALIDARE RUNDA (LEGATĂ DE START)
       // ===============================
-      const round = await RoundState.findOne().sort({ endsAt: -1 });
-
-      if (!round) {
-        return res.status(400).json({ error: "No active round" });
+      if (!user.gameRoundId || !user.gameStartedAt) {
+        return res.status(400).json({ error: "Game not started" });
       }
+
+      const round = await RoundState.findOne({
+        roundId: user.gameRoundId
+      });
 
       const GRACE_MS = 2 * 60 * 1000;
 
-      if (round.paidAt) {
-        return res.status(400).json({ error: "Round already paid" });
-      }
+      if (
+        !round ||
+        round.paidAt ||
+        Date.now() > round.endsAt.getTime() + GRACE_MS
+      ) {
+        // 🔥 INVALIDĂM COMPLET SESIUNEA
+        user.gameStartedAt = null;
+        user.gameRoundId = null;
+        await user.save();
 
-      if (Date.now() > round.endsAt.getTime() + GRACE_MS) {
         return res.status(400).json({ error: "Round expired" });
       }
 
@@ -203,25 +214,29 @@ app.post(
       // 2️⃣ VALIDARE SCOR (BASIC)
       // ===============================
       if (!Number.isFinite(score) || score < 0 || score > 150) {
+        user.gameStartedAt = null;
+        user.gameRoundId = null;
+        await user.save();
+
         return res.status(400).json({ error: "Invalid score" });
       }
 
       // ===============================
-      // 3️⃣ VALIDARE START GAME
+      // 3️⃣ VALIDARE TIMP JOC
       // ===============================
-      if (!user.gameStartedAt) {
-        return res.status(400).json({ error: "Game not started" });
-      }
-
       const playTime = Date.now() - user.gameStartedAt.getTime();
 
-      // ⛔ minim anti-spam (NU anti-skill)
+      // minim anti-spam, NU anti-skill
       if (playTime < 1500) {
+        user.gameStartedAt = null;
+        user.gameRoundId = null;
+        await user.save();
+
         return res.status(400).json({ error: "Game too short" });
       }
 
       // ===============================
-      // 4️⃣ PLAUZIBILITATE SCOR (CORECT)
+      // 4️⃣ PLAUZIBILITATE SCOR
       // ===============================
       const MAX_SCORE_PER_SECOND = 3;
       const maxAllowedScore = Math.floor(
@@ -229,11 +244,15 @@ app.post(
       );
 
       if (score > maxAllowedScore) {
+        user.gameStartedAt = null;
+        user.gameRoundId = null;
+        await user.save();
+
         return res.status(400).json({ error: "Score not plausible" });
       }
 
       // ===============================
-      // 5️⃣ 1 SCOR / RUNDA / USER (BEST)
+      // 5️⃣ BEST SCORE / USER / RUNDA
       // ===============================
       const existing = await Score.findOne({
         userId: user._id,
@@ -242,9 +261,10 @@ app.post(
 
       if (existing) {
         if (score <= existing.score) {
-          // invalidăm sesiunea chiar și aici
           user.gameStartedAt = null;
+          user.gameRoundId = null;
           await user.save();
+
           return res.json({ ignored: true });
         }
 
@@ -254,16 +274,21 @@ app.post(
       } else {
         await Score.create({
           userId: user._id,
+          username: user.username,
           score,
           roundId: round.roundId
         });
       }
 
       // ===============================
-      // 6️⃣ INVALIDĂM SESIUNEA
+      // 6️⃣ FINAL — INVALIDĂM SESIUNEA
       // ===============================
       user.gameStartedAt = null;
+      user.gameRoundId = null;
       await user.save();
+
+      // 🔥 invalidate leaderboard cache
+      leaderboardCache.expiresAt = 0;
 
       res.json({ success: true });
 
@@ -277,21 +302,43 @@ app.post(
 
 
 
+
 // =================================================
 // START GAME
 // =================================================
 
 app.post("/api/start-game", authRequired, async (req, res) => {
   try {
+    // 🔁 luăm runda curentă
+    const round = await RoundState.findOne().sort({ endsAt: -1 });
+
+    if (!round || round.paidAt) {
+      return res.status(400).json({ error: "No active round" });
+    }
+
+    // 🔒 resetăm orice sesiune veche (IMPORTANT)
+    req.user.gameStartedAt = null;
+    req.user.gameRoundId = null;
+
+    // ▶️ pornim sesiunea NOUĂ, legată de runda curentă
     req.user.gameStartedAt = new Date();
+    req.user.gameRoundId = round.roundId;
+
     await req.user.save();
 
-    res.json({ ok: true });
+    res.json({
+      ok: true,
+      roundId: round.roundId,
+      endsAt: round.endsAt.getTime()
+    });
+
   } catch (err) {
     console.error("START GAME ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
+
 
 
 
@@ -304,47 +351,54 @@ app.post("/api/start-game", authRequired, async (req, res) => {
 
 app.get("/api/leaderboard", async (req, res) => {
   try {
-    // 🔥 LUĂM RUNDA CURENTĂ
-    const round = await RoundState.findOne().sort({ endsAt: -1 });
+    const now = Date.now();
 
-    if (!round) {
-      return res.json({
-        leaderboard: [],
-        endsAt: null,
-        serverTime: Date.now()
-      });
+    if (leaderboardCache.data && now < leaderboardCache.expiresAt) {
+      return res.json(leaderboardCache.data);
     }
 
-    // 🔥 DOAR SCORURILE DIN RUNDA CURENTĂ
+    const round = await RoundState.findOne().sort({ endsAt: -1 });
+    if (!round) {
+      return res.json({ leaderboard: [], endsAt: null, serverTime: Date.now() });
+    }
+
     const results = await Score.aggregate([
       { $match: { roundId: round.roundId } },
-      { $group: { _id: "$userId", best_score: { $max: "$score" } } },
+      { $group: {
+        _id: "$userId",
+        username: { $first: "$username" },
+        best_score: { $max: "$score" }
+    }}
+    ,
       { $sort: { best_score: -1 } },
       { $limit: 10 }
     ]);
 
-    const leaderboard = await Promise.all(
-      results.map(async (r) => {
-        const user = await User.findById(r._id);
-        return {
-          name: user?.username || "Unknown",
-          score: r.best_score
-        };
-      })
-    );
+    // 🔥 IMPORTANT: username direct din User la save-score
+    const leaderboard = results.map(r => ({
+      name: r.username,
+      score: r.best_score
+    }));
+    
 
-    // ✅ TRIMITEM ȘI TIMPUL DE LA SERVER
-    res.json({
+    const payload = {
       leaderboard,
       endsAt: round.endsAt.getTime(),
       serverTime: Date.now()
-    });
+    };
 
+    leaderboardCache = {
+      data: payload,
+      expiresAt: now + 3000 // 3 sec cache
+    };
+
+    res.json(payload);
   } catch (err) {
     console.error("LEADERBOARD ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 // =================================================

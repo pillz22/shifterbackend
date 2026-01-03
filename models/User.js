@@ -8,6 +8,8 @@ const userSchema = new mongoose.Schema({
   wallet: String,
 
   createdAt: { type: Date, default: Date.now },
+  gameRoundId: { type: Number, default: null },
+
 
   // 🔒 anti-cheat
   gameStartedAt: { type: Date, default: null },
