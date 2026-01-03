@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   token: String,
   wallet: String,
   createdAt: { type: Date, default: Date.now },
+  gameStartedAt: { type: Date, default: null },
   lastScoreAt: Date
 });
 
