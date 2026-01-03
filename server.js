@@ -317,7 +317,11 @@ app.get("/api/leaderboard", async (req, res) => {
     const round = await RoundState.findOne().sort({ endsAt: -1 });
 
     if (!round) {
-      return res.json([]);
+      return res.json({
+        leaderboard: [],
+        endsAt: null,
+        serverTime: Date.now()
+      });
     }
 
     // 🔥 DOAR SCORURILE DIN RUNDA CURENTĂ
@@ -328,7 +332,7 @@ app.get("/api/leaderboard", async (req, res) => {
       { $limit: 10 }
     ]);
 
-    const data = await Promise.all(
+    const leaderboard = await Promise.all(
       results.map(async (r) => {
         const user = await User.findById(r._id);
         return {
@@ -338,13 +342,19 @@ app.get("/api/leaderboard", async (req, res) => {
       })
     );
 
-    res.json(data);
+    // ✅ TRIMITEM ȘI TIMPUL DE LA SERVER
+    res.json({
+      leaderboard,
+      endsAt: round.endsAt.getTime(),
+      serverTime: Date.now()
+    });
 
   } catch (err) {
     console.error("LEADERBOARD ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // =================================================
 // START
