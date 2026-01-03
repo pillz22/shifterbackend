@@ -55,10 +55,13 @@ export async function runPayout() {
     // ============================
     // 🛑 C. RUNDA NU S-A TERMINAT
     // ============================
-    if (now < round.endsAt) {
+    const PAYOUT_GRACE_MS = 1500; // 1.5 sec toleranță
+
+    if (now.getTime() + PAYOUT_GRACE_MS < round.endsAt.getTime()) {
       console.log("Round still active, skipping payout");
       return;
     }
+    
 
     // ============================
     // 🛑 D. RUNDA DEJA PROCESATĂ
