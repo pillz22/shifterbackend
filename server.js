@@ -353,33 +353,62 @@ app.get("/api/leaderboard", async (req, res) => {
   try {
     const now = Date.now();
 
+    // 🔥 CACHE (3 sec)
     if (leaderboardCache.data && now < leaderboardCache.expiresAt) {
       return res.json(leaderboardCache.data);
     }
 
+    // 🔁 runda curentă
     const round = await RoundState.findOne().sort({ endsAt: -1 });
     if (!round) {
-      return res.json({ leaderboard: [], endsAt: null, serverTime: Date.now() });
+      return res.json({
+        leaderboard: [],
+        endsAt: null,
+        serverTime: Date.now()
+      });
     }
 
-    const results = await Score.aggregate([
+    // ===============================
+    // LEADERBOARD REAL (JOIN CU USERS)
+    // ===============================
+    const leaderboard = await Score.aggregate([
+      // doar scoruri din runda curentă
       { $match: { roundId: round.roundId } },
-      { $group: {
-        _id: "$userId",
-        username: { $first: "$username" },
-        best_score: { $max: "$score" }
-    }}
-    ,
-      { $sort: { best_score: -1 } },
+
+      // best score per user
+      {
+        $group: {
+          _id: "$userId",
+          best_score: { $max: "$score" }
+        }
+      },
+
+      // join cu users
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user"
+        }
+      },
+
+      // user este array → îl facem obiect
+      { $unwind: "$user" },
+
+      // shape final
+      {
+        $project: {
+          _id: 0,
+          name: "$user.username",
+          score: "$best_score"
+        }
+      },
+
+      // sort + limit
+      { $sort: { score: -1 } },
       { $limit: 10 }
     ]);
-
-    // 🔥 IMPORTANT: username direct din User la save-score
-    const leaderboard = results.map(r => ({
-      name: r.username,
-      score: r.best_score
-    }));
-    
 
     const payload = {
       leaderboard,
@@ -387,17 +416,20 @@ app.get("/api/leaderboard", async (req, res) => {
       serverTime: Date.now()
     };
 
+    // 🔥 set cache
     leaderboardCache = {
       data: payload,
-      expiresAt: now + 3000 // 3 sec cache
+      expiresAt: now + 3000 // 3 sec
     };
 
     res.json(payload);
+
   } catch (err) {
     console.error("LEADERBOARD ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 
