@@ -9,7 +9,7 @@ import User from "./models/User.js";
 import Score from "./models/Score.js";
 import RoundState from "./models/RoundState.js";
 import { PublicKey } from "@solana/web3.js";
-
+import rateLimit from "express-rate-limit";
 
 
 
@@ -119,26 +119,36 @@ app.post("/api/auth/login", async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    if (!username || !password)
+    if (!username || !password) {
       return res.status(400).json({ error: "Missing fields" });
+    }
 
     const user = await User.findOne({ username });
-    if (!user)
+    if (!user) {
       return res.status(400).json({ error: "Invalid credentials" });
+    }
 
-    const passwordHash = crypto.createHash("sha256").update(password).digest("hex");
-    if (user.passwordHash !== passwordHash)
+    const passwordHash = crypto
+      .createHash("sha256")
+      .update(password)
+      .digest("hex");
+
+    if (user.passwordHash !== passwordHash) {
       return res.status(400).json({ error: "Invalid credentials" });
+    }
+
+    // 🔒 REGENERĂM TOKEN LA FIECARE LOGIN
+    user.token = crypto.randomBytes(32).toString("hex");
+    await user.save();
 
     res.json({
       token: user.token,
       user: {
-        id: user._id,        // 🔥 CRITIC
+        id: user._id,
         username: user.username,
         wallet: user.wallet
       }
     });
-    
 
   } catch (err) {
     console.error("LOGIN ERROR:", err);
@@ -146,11 +156,24 @@ app.post("/api/auth/login", async (req, res) => {
   }
 });
 
+
 // =================================================
 // SAVE SCORE
 // =================================================
+const saveScoreLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
-app.post("/api/save-score", authRequired, async (req, res) => {
+
+app.post(
+  "/api/save-score",
+  authRequired,
+  saveScoreLimiter,
+  async (req, res) => {
+
   try {
     const { score } = req.body;
     const user = req.user;
@@ -257,10 +280,17 @@ app.post("/api/save-score", authRequired, async (req, res) => {
 
 app.post("/api/start-game", authRequired, async (req, res) => {
   try {
-    // 🔒 pornim jocul DOAR dacă nu există deja o sesiune activă
-    if (!req.user.gameStartedAt) {
-      req.user.gameStartedAt = new Date();
-      await req.user.save();
+    const user = req.user;
+
+    // ⏱️ prevenim sesiuni blocate / vechi
+    const MAX_SESSION_AGE = 5 * 60 * 1000; // 5 minute
+
+    if (
+      !user.gameStartedAt ||
+      Date.now() - user.gameStartedAt.getTime() > MAX_SESSION_AGE
+    ) {
+      user.gameStartedAt = new Date();
+      await user.save();
     }
 
     res.json({ ok: true });
@@ -269,6 +299,7 @@ app.post("/api/start-game", authRequired, async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 
