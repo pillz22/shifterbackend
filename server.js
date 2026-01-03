@@ -176,104 +176,104 @@ app.post(
   authRequired,
   saveScoreLimiter,
   async (req, res) => {
+    try {
+      const { score } = req.body;
+      const user = req.user;
 
-  try {
-    const { score } = req.body;
-    const user = req.user;
+      // ===============================
+      // 1️⃣ VALIDARE RUNDA
+      // ===============================
+      const round = await RoundState.findOne().sort({ endsAt: -1 });
 
-    // ===============================
-    // 1️⃣ VALIDARE RUNDA (PRIMA!)
-    // ===============================
-    const round = await RoundState.findOne().sort({ endsAt: -1 });
-
-    if (!round) {
-      return res.status(400).json({ error: "No active round" });
-    }
-
-    const GRACE_MS = 2 * 60 * 1000;
-
-    if (round.paidAt) {
-      return res.status(400).json({ error: "Round already paid" });
-    }
-
-    if (Date.now() > round.endsAt.getTime() + GRACE_MS) {
-      return res.status(400).json({ error: "Round expired" });
-    }
-
-    // ===============================
-    // 2️⃣ VALIDARE SCOR (BASIC)
-    // ===============================
-    if (!Number.isFinite(score) || score < 0 || score > 150) {
-      return res.status(400).json({ error: "Invalid score" });
-    }
-
-    // ===============================
-    // 3️⃣ VALIDARE START GAME + TIMP
-    // ===============================
-    const MIN_GAME_TIME = 20_000; // 20 secunde
-
-    if (!user.gameStartedAt) {
-      return res.status(400).json({ error: "Game not started" });
-    }
-
-    const playTime = Date.now() - user.gameStartedAt.getTime();
-
-    if (playTime < MIN_GAME_TIME) {
-      return res.status(400).json({ error: "Game too short" });
-    }
-
-    // ===============================
-    // 4️⃣ PLAUZIBILITATE SCOR
-    // ===============================
-    const MAX_SCORE_PER_SECOND = 3;
-    const maxAllowedScore =
-      Math.floor((playTime / 1000) * MAX_SCORE_PER_SECOND);
-
-    if (score > maxAllowedScore) {
-      return res.status(400).json({ error: "Score not plausible" });
-    }
-
-    // ===============================
-    // 5️⃣ 1 SCOR / RUNDA / USER (BEST)
-    // ===============================
-    const existing = await Score.findOne({
-      userId: user._id,
-      roundId: round.roundId
-    });
-
-    if (existing) {
-      if (score <= existing.score) {
-        // invalidăm sesiunea chiar și aici
-        user.gameStartedAt = null;
-        await user.save();
-
-        return res.json({ ignored: true });
+      if (!round) {
+        return res.status(400).json({ error: "No active round" });
       }
 
-      existing.score = score;
-      existing.timestamp = new Date();
-      await existing.save();
-    } else {
-      await Score.create({
+      const GRACE_MS = 2 * 60 * 1000;
+
+      if (round.paidAt) {
+        return res.status(400).json({ error: "Round already paid" });
+      }
+
+      if (Date.now() > round.endsAt.getTime() + GRACE_MS) {
+        return res.status(400).json({ error: "Round expired" });
+      }
+
+      // ===============================
+      // 2️⃣ VALIDARE SCOR (BASIC)
+      // ===============================
+      if (!Number.isFinite(score) || score < 0 || score > 150) {
+        return res.status(400).json({ error: "Invalid score" });
+      }
+
+      // ===============================
+      // 3️⃣ VALIDARE START GAME
+      // ===============================
+      if (!user.gameStartedAt) {
+        return res.status(400).json({ error: "Game not started" });
+      }
+
+      const playTime = Date.now() - user.gameStartedAt.getTime();
+
+      // ⛔ minim anti-spam (NU anti-skill)
+      if (playTime < 1500) {
+        return res.status(400).json({ error: "Game too short" });
+      }
+
+      // ===============================
+      // 4️⃣ PLAUZIBILITATE SCOR (CORECT)
+      // ===============================
+      const MAX_SCORE_PER_SECOND = 3;
+      const maxAllowedScore = Math.floor(
+        (playTime / 1000) * MAX_SCORE_PER_SECOND
+      );
+
+      if (score > maxAllowedScore) {
+        return res.status(400).json({ error: "Score not plausible" });
+      }
+
+      // ===============================
+      // 5️⃣ 1 SCOR / RUNDA / USER (BEST)
+      // ===============================
+      const existing = await Score.findOne({
         userId: user._id,
-        score,
         roundId: round.roundId
       });
+
+      if (existing) {
+        if (score <= existing.score) {
+          // invalidăm sesiunea chiar și aici
+          user.gameStartedAt = null;
+          await user.save();
+          return res.json({ ignored: true });
+        }
+
+        existing.score = score;
+        existing.timestamp = new Date();
+        await existing.save();
+      } else {
+        await Score.create({
+          userId: user._id,
+          score,
+          roundId: round.roundId
+        });
+      }
+
+      // ===============================
+      // 6️⃣ INVALIDĂM SESIUNEA
+      // ===============================
+      user.gameStartedAt = null;
+      await user.save();
+
+      res.json({ success: true });
+
+    } catch (err) {
+      console.error("SAVE SCORE ERROR:", err);
+      res.status(500).json({ error: "Server error" });
     }
-
-    // ===============================
-    // 6️⃣ INVALIDĂM SESIUNEA
-    // ===============================
-    user.gameStartedAt = null;
-    await user.save();
-
-    res.json({ success: true });
-
-  } catch (err) {
-    console.error("SAVE SCORE ERROR:", err);
-    res.status(500).json({ error: "Server error" });
   }
-});
+);
+
 
 
 
