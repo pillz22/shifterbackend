@@ -27,13 +27,26 @@ router.get("/last-winners", async (req, res) => {
 // =================================================
 router.get("/payout-state", async (req, res) => {
   try {
-    const state = await PayoutState.findOne().sort({ lastRunAt: -1 });
-    res.json(state || null);
+    const state = await PayoutState.findOne().sort({ nextRunAt: -1 });
+
+    if (!state || !state.nextRunAt) {
+      return res.json({
+        nextRunAt: null,
+        serverTime: Date.now()
+      });
+    }
+
+    res.json({
+      nextRunAt: state.nextRunAt.getTime(), // 🔥 NUMBER (ms)
+      serverTime: Date.now()                // 🔥 OBLIGATORIU
+    });
+
   } catch (err) {
     console.error("PAYOUT STATE ERROR:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // =================================================
 // MARK PAYOUT AS SEEN (auth)
