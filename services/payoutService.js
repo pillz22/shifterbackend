@@ -22,7 +22,7 @@ export async function runPayout() {
   console.log("Running payout job...");
 
   const now = new Date();
-  const interval = 2 * 60 * 1000; // 2 min
+  const interval = 5 * 60 * 1000; // 5 min
   const nextRunAt = new Date(now.getTime() + interval);
 
   try {
@@ -81,7 +81,7 @@ export async function runPayout() {
       { $limit: 3 }
     ]);
 
-    const rewards = [1, 1, 1]; // test
+    const rewards = [10, 5, 5]; // test
 
     // ============================
     // F. PROCESĂM WINNERII

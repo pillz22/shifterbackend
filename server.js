@@ -43,7 +43,7 @@ app.use("/api", rewardsRouter);
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB connected");
-    setInterval(runPayout, 2 * 60 * 1000);
+    setInterval(runPayout, 5 * 60 * 1000);
   })
   .catch(err => console.error("❌ MongoDB error:", err));
 
@@ -195,7 +195,8 @@ app.post(
         roundId: user.gameRoundId
       });
 
-      const GRACE_MS = 2 * 60 * 1000;
+      const GRACE_MS = 5000; // 5 sec
+
 
       if (
         !round ||
